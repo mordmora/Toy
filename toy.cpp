@@ -121,3 +121,74 @@ class FunctionAST : public ExprAST {
             : Proto(std::move(Proto)), Body(std::move(Body)){}
 };
 
+auto LHS = std::make_unique<VariableExprAST>("x");
+auto RHS = std::make_unique<VariableExprAST>("y");
+auto Result = std::make_unique<BinaryExprAST>('+', std::move(LHS), std::move(RHS));
+
+static int CurrTok;
+int getNextToken(){ //buffer de tokens
+    return CurrTok = gettok();
+}
+
+//Manejo de errores
+std::unique_ptr<ExprAST> LogError(const char *Str){
+    fprintf(stderr, "Error: %s\n", Str);
+    return nullptr;
+}
+
+std::unique_ptr<PrototypeAST> LogErrorP(const char* Str){
+    LogError(Str);
+    return nullptr;
+}
+
+//Parsing
+
+// numExpr => num
+static std::unique_ptr<ExprAST> ParseNumberExpr(){
+    auto Result = std::make_unique<NumberExprAST>(NumVal);
+    getNextToken();
+    return std::move(Result);
+}
+
+
+// parenExpr => ( expr )
+static std::unique_ptr<ExprAST> ParseParenExpr(){
+    getNextToken(); // come (
+    auto V = ParseExpression();
+    if(!V)
+        return nullptr;
+    
+    if(CurrTok != ')')
+        return LogError("Se esperaba ')' ");
+    getNextToken(); //come )
+    return V;
+}
+
+//identifierExpr => identifier | identifier '(' expression ')'
+static std::unique_ptr<ExprAST> ParseIdentifierExpr(){
+    std::string IdName = identifierStr;
+
+    getNextToken();
+    if(CurrTok != '(') // referencia a variable normal
+        return std::make_unique<VariableExprAST>(IdName);
+    
+    getNextToken();
+    std::vector<std::unique_ptr<ExprAST>> Args;
+    if(CurrTok != ')' ){
+        while(true){
+            if(auto Arg = ParseExpression())
+                Args.push_back(std::move(Arg));
+            else
+                return nullptr;
+
+            if(CurrTok == ')')
+                break;
+            
+            if(CurrTok != ',')
+                return LogError("Se esperaba ',' o ')' en la lista de argumentos");
+            getNextToken();
+        }
+    }
+    getNextToken(); //Come )
+    return std::make_unique<CallExprAST>(IdName, std::move(Args));
+}
